@@ -1,0 +1,72 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function poolDoc(poolId) {
+      return get(/databases/$(database)/documents/pools/$(poolId));
+    }
+
+    function isMember(poolId) {
+      return isSignedIn() && request.auth.uid in poolDoc(poolId).data.memberUids;
+    }
+
+    function isCommissioner(poolId) {
+      return isSignedIn() && request.auth.uid == poolDoc(poolId).data.commissionerUid;
+    }
+
+    function weekIsOpen(poolId, weekId) {
+      let week = get(/databases/$(database)/documents/pools/$(poolId)/weeks/$(weekId)).data;
+      return week.status == "open" && request.time < week.lockAt;
+    }
+
+    match /pools/{poolId} {
+      allow read: if isMember(poolId);
+      allow create: if isSignedIn()
+        && request.resource.data.commissionerUid == request.auth.uid
+        && request.resource.data.memberUids == [request.auth.uid];
+      allow update, delete: if isCommissioner(poolId);
+
+      match /weeks/{weekId} {
+        allow read: if isMember(poolId);
+        // Weeks are created and locked by Cloud Functions (Admin SDK bypasses rules).
+        allow write: if false;
+
+        match /games/{gameId} {
+          allow read: if isMember(poolId);
+          allow write: if false;
+        }
+
+        match /picks/{uid} {
+          allow read: if isMember(poolId)
+            && (request.auth.uid == uid || !weekIsOpen(poolId, weekId));
+          allow create, update: if isMember(poolId)
+            && request.auth.uid == uid
+            && weekIsOpen(poolId, weekId)
+            && request.resource.data.keys().hasAll(['selections', 'tiebreakerGuess', 'submittedAt']);
+          allow delete: if false;
+        }
+
+        match /results/{uid} {
+          allow read: if isMember(poolId);
+          allow write: if false;
+        }
+      }
+
+      match /standings/{uid} {
+        allow read: if isMember(poolId);
+        allow write: if false;
+      }
+    }
+
+    // Display names, so standings can show people instead of UIDs.
+    match /users/{uid} {
+      allow read: if isSignedIn();
+      allow write: if isSignedIn() && request.auth.uid == uid;
+    }
+  }
+}

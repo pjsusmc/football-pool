@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "265891055955",
+    "project_id": "football-pool-7a153",
+    "storage_bucket": "football-pool-7a153.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:265891055955:android:218609353f8e9fa247f9a6",
+        "android_client_info": {
+          "package_name": "com.example.football_pool"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAdWUy2-Hs0ayLDm5avUhs5FaCIlMUfCV8"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
