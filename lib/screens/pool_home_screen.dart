@@ -131,6 +131,22 @@ class PoolHomeScreen extends StatelessWidget {
                         builder: (_) => WeekPicksScreen(poolId: poolId, weekId: w.id)),
                   ),
                 ),
+              // Playoff rounds are added automatically once ESPN publishes the matchups.
+              // Week 22 is the Super Bowl, the last round, so stop showing the note once it exists.
+              if (!weeks.any((w) => w.weekNumber >= 22))
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 20, 24, 32),
+                  child: Text(
+                    weeks.any((w) => w.weekNumber >= 19)
+                        ? 'The remaining playoff rounds will appear here once their matchups are set.'
+                        : 'Playoff rounds will appear here once the matchups are set.',
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context)
+                        .textTheme
+                        .bodySmall
+                        ?.copyWith(color: Theme.of(context).hintColor),
+                  ),
+                ),
             ],
           );
         },
