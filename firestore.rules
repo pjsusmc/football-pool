@@ -19,26 +19,40 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == poolDoc(poolId).data.commissionerUid;
     }
 
+    // A non-member may add ONLY their own uid to memberUids (joining by pool ID).
+    function isSelfJoin() {
+      return isSignedIn()
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['memberUids'])
+        && request.resource.data.memberUids.toSet()
+             == resource.data.memberUids.toSet().union([request.auth.uid].toSet());
+    }
+
     function weekIsOpen(poolId, weekId) {
       let week = get(/databases/$(database)/documents/pools/$(poolId)/weeks/$(weekId)).data;
       return week.status == "open" && request.time < week.lockAt;
     }
 
     match /pools/{poolId} {
-      allow read: if isMember(poolId);
+      // Uses resource.data (not a get() lookup) so it also works for the list query
+      // "pools where memberUids contains me".
+      allow read: if isSignedIn() && request.auth.uid in resource.data.memberUids;
       allow create: if isSignedIn()
         && request.resource.data.commissionerUid == request.auth.uid
         && request.resource.data.memberUids == [request.auth.uid];
-      allow update, delete: if isCommissioner(poolId);
+      allow update: if isCommissioner(poolId) || isSelfJoin();
+      allow delete: if isCommissioner(poolId);
 
       match /weeks/{weekId} {
         allow read: if isMember(poolId);
-        // Weeks are created and locked by Cloud Functions (Admin SDK bypasses rules).
-        allow write: if false;
+        // Weeks are created, locked and scored by the sync worker (service account bypasses rules).
+        // The commissioner may delete them, but only as part of deleting the pool.
+        allow create, update: if false;
+        allow delete: if isCommissioner(poolId);
 
         match /games/{gameId} {
           allow read: if isMember(poolId);
-          allow write: if false;
+          allow create, update: if false;
+          allow delete: if isCommissioner(poolId);
         }
 
         match /picks/{uid} {
@@ -48,18 +62,20 @@ service cloud.firestore {
             && request.auth.uid == uid
             && weekIsOpen(poolId, weekId)
             && request.resource.data.keys().hasAll(['selections', 'tiebreakerGuess', 'submittedAt']);
-          allow delete: if false;
+          allow delete: if isCommissioner(poolId);
         }
 
         match /results/{uid} {
           allow read: if isMember(poolId);
-          allow write: if false;
+          allow create, update: if false;
+          allow delete: if isCommissioner(poolId);
         }
       }
 
       match /standings/{uid} {
         allow read: if isMember(poolId);
-        allow write: if false;
+        allow create, update: if false;
+        allow delete: if isCommissioner(poolId);
       }
     }
 

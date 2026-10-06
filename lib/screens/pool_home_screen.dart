@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/pool.dart';
 import '../models/week.dart';
+import '../services/auth_service.dart';
 import '../services/pool_service.dart';
 import 'standings_screen.dart';
 import 'week_picks_screen.dart';
@@ -10,6 +11,57 @@ import 'week_picks_screen.dart';
 class PoolHomeScreen extends StatelessWidget {
   final String poolId;
   const PoolHomeScreen({super.key, required this.poolId});
+
+  Future<void> _confirmDelete(BuildContext context, Pool pool) async {
+    final service = context.read<PoolService>();
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final typed = TextEditingController();
+
+    final ok = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setState) => AlertDialog(
+          title: const Text('Delete this pool?'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'This permanently deletes "${pool.name}" for all ${pool.memberUids.length} '
+                'member(s), including every pick and result. It cannot be undone.',
+              ),
+              const SizedBox(height: 12),
+              const Text('Type the pool name to confirm:'),
+              TextField(
+                controller: typed,
+                autofocus: true,
+                onChanged: (_) => setState(() {}),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: Colors.red),
+              onPressed: typed.text.trim() == pool.name ? () => Navigator.pop(ctx, true) : null,
+              child: const Text('Delete'),
+            ),
+          ],
+        ),
+      ),
+    );
+    if (ok != true) return;
+
+    messenger.showSnackBar(const SnackBar(content: Text('Deleting pool…')));
+    try {
+      await service.deletePool(pool);
+      nav.pop();
+      messenger.showSnackBar(const SnackBar(content: Text('Pool deleted')));
+    } catch (e) {
+      messenger.showSnackBar(SnackBar(content: Text('Could not delete pool: $e')));
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,6 +74,20 @@ class PoolHomeScreen extends StatelessWidget {
           builder: (_, snap) => Text(snap.data?.name ?? 'Pool'),
         ),
         actions: [
+          // Only the commissioner sees the delete button.
+          StreamBuilder<Pool>(
+            stream: service.watchPool(poolId),
+            builder: (context, snap) {
+              final pool = snap.data;
+              final uid = context.read<AuthService>().currentUser?.uid;
+              if (pool == null || pool.commissionerUid != uid) return const SizedBox.shrink();
+              return IconButton(
+                icon: const Icon(Icons.delete_outline),
+                tooltip: 'Delete pool',
+                onPressed: () => _confirmDelete(context, pool),
+              );
+            },
+          ),
           IconButton(
             icon: const Icon(Icons.leaderboard),
             tooltip: 'Standings',
@@ -37,7 +103,16 @@ class PoolHomeScreen extends StatelessWidget {
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final weeks = snap.data!;
           if (weeks.isEmpty) {
-            return const Center(child: Text('Weeks are still being set up. Check back shortly.'));
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: Text(
+                  'Setting up the season. Weeks appear automatically within about '
+                  '15 minutes of creating the pool.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
+            );
           }
           return ListView(
             children: [

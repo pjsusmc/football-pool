@@ -3,11 +3,27 @@
     "rules": "firestore.rules",
     "indexes": "firestore.indexes.json"
   },
-  "functions": [
-    {
-      "source": "functions",
-      "codebase": "default",
-      "runtime": "nodejs20"
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "football-pool-7a153",
+          "appId": "1:265891055955:android:218609353f8e9fa247f9a6",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "football-pool-7a153",
+          "configurations": {
+            "android": "1:265891055955:android:218609353f8e9fa247f9a6",
+            "ios": "1:265891055955:ios:570dc5f553dcd88447f9a6",
+            "macos": "1:265891055955:ios:570dc5f553dcd88447f9a6",
+            "web": "1:265891055955:web:705370f5b017cd8247f9a6",
+            "windows": "1:265891055955:web:c2db7504800fc19547f9a6"
+          }
+        }
+      }
     }
-  ]
+  }
 }

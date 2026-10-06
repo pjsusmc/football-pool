@@ -44,7 +44,8 @@ class PoolsScreen extends StatelessWidget {
     );
     if (ok != true || id.text.trim().isEmpty || !context.mounted) return;
     try {
-      await context.read<PoolService>().joinPool(id.text.trim());
+      final uid = context.read<AuthService>().currentUser!.uid;
+      await context.read<PoolService>().joinPool(id.text.trim(), uid);
     } catch (e) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Could not join: $e')));
@@ -66,6 +67,17 @@ class PoolsScreen extends StatelessWidget {
       body: StreamBuilder<List<Pool>>(
         stream: context.read<PoolService>().watchMyPools(uid),
         builder: (context, snap) {
+          if (snap.hasError) {
+            return Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: SelectableText(
+                  'Could not load your pools:\n${snap.error}',
+                  style: const TextStyle(color: Colors.red),
+                ),
+              ),
+            );
+          }
           if (!snap.hasData) return const Center(child: CircularProgressIndicator());
           final pools = snap.data!;
           if (pools.isEmpty) {

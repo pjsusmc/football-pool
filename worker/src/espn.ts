@@ -75,6 +75,8 @@ export async function upsertWeek(
 ): Promise<void> {
   if (events.length === 0) return;
   const db = admin.firestore();
+  // Don't recreate weeks under a pool that was deleted while the worker was running.
+  if (!(await db.collection("pools").doc(poolId).get()).exists) return;
   const weekRef = db.collection("pools").doc(poolId).collection("weeks").doc(weekDocId(season, week));
 
   const existing = await weekRef.get();
