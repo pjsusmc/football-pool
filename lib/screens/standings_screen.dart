@@ -217,7 +217,7 @@ class _WeekViewState extends State<_WeekView> {
             isExpanded: true,
             items: [
               for (final w in widget.weeks)
-                DropdownMenuItem(value: w.id, child: Text('Week ${w.weekNumber}')),
+                DropdownMenuItem(value: w.id, child: Text(w.title)),
             ],
             onChanged: (v) => setState(() => _weekId = v),
           ),

@@ -118,7 +118,7 @@ class PoolHomeScreen extends StatelessWidget {
             children: [
               for (final w in weeks)
                 ListTile(
-                  title: Text('Week ${w.weekNumber}'),
+                  title: Text(w.title),
                   subtitle: Text(w.isOpen
                       ? 'Open · picks lock ${fmt.format(w.lockAt.toLocal())}'
                       : w.status == WeekStatus.scored

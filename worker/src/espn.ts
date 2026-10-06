@@ -22,12 +22,51 @@ export interface EspnEvent {
   }>;
 }
 
-export async function fetchWeekEvents(season: number, week: number): Promise<EspnEvent[]> {
-  const url = `${SCOREBOARD}?seasontype=2&week=${week}&dates=${season}`;
+/**
+ * One pool "week" = one ESPN scoreboard slot. Regular season is weeks 1-18. Playoff rounds
+ * continue the numbering (19-22) and use ESPN's postseason feed (seasontype=3), where
+ * ESPN's week 4 is the Pro Bowl and is deliberately skipped.
+ */
+export interface Slot {
+  number: number; // pool week number (used for ordering and the doc id)
+  seasonType: 2 | 3; // 2 = regular season, 3 = postseason
+  espnWeek: number; // ESPN's week parameter within that season type
+  label: string | null; // display label for playoff rounds
+}
+
+export const REGULAR_SEASON_WEEKS = 18;
+
+export const SLOTS: Slot[] = [
+  ...Array.from({ length: REGULAR_SEASON_WEEKS }, (_, i): Slot => ({
+    number: i + 1,
+    seasonType: 2,
+    espnWeek: i + 1,
+    label: null,
+  })),
+  { number: 19, seasonType: 3, espnWeek: 1, label: "Wild Card" },
+  { number: 20, seasonType: 3, espnWeek: 2, label: "Divisional Round" },
+  { number: 21, seasonType: 3, espnWeek: 3, label: "Conference Championships" },
+  { number: 22, seasonType: 3, espnWeek: 5, label: "Super Bowl" },
+];
+
+export const slotFor = (weekNumber: number): Slot | undefined =>
+  SLOTS.find((s) => s.number === weekNumber);
+
+export async function fetchWeekEvents(season: number, slot: Slot): Promise<EspnEvent[]> {
+  const url = `${SCOREBOARD}?seasontype=${slot.seasonType}&week=${slot.espnWeek}&dates=${season}`;
   const res = await fetch(url);
-  if (!res.ok) throw new Error(`ESPN fetch failed (${res.status}) for week ${week}`);
+  if (!res.ok) throw new Error(`ESPN fetch failed (${res.status}) for ${slot.label ?? "week " + slot.number}`);
   const body = (await res.json()) as { events?: EspnEvent[] };
   return body.events ?? [];
+}
+
+/** Playoff games can be listed before their teams are known; ignore those placeholders. */
+function hasRealTeams(ev: EspnEvent): boolean {
+  const comps = ev.competitions[0]?.competitors ?? [];
+  const home = comps.find((c) => c.homeAway === "home");
+  const away = comps.find((c) => c.homeAway === "away");
+  const ok = (n?: string) => !!n && !/\b(tbd|tba)\b/i.test(n);
+  return ok(home?.team?.displayName) && ok(away?.team?.displayName);
 }
 
 function tzOffsetMinutes(date: Date, tz: string): number {
@@ -70,14 +109,19 @@ export const weekDocId = (season: number, week: number) =>
 export async function upsertWeek(
   poolId: string,
   season: number,
-  week: number,
-  events: EspnEvent[]
+  slot: Slot,
+  allEvents: EspnEvent[]
 ): Promise<void> {
+  const events = allEvents.filter(hasRealTeams);
   if (events.length === 0) return;
   const db = admin.firestore();
   // Don't recreate weeks under a pool that was deleted while the worker was running.
   if (!(await db.collection("pools").doc(poolId).get()).exists) return;
-  const weekRef = db.collection("pools").doc(poolId).collection("weeks").doc(weekDocId(season, week));
+  const weekRef = db
+    .collection("pools")
+    .doc(poolId)
+    .collection("weeks")
+    .doc(weekDocId(season, slot.number));
 
   const existing = await weekRef.get();
   const existingStatus = existing.exists ? (existing.data()!.status as string) : null;
@@ -94,7 +138,8 @@ export async function upsertWeek(
 
   await weekRef.set(
     {
-      weekNumber: week,
+      weekNumber: slot.number,
+      label: slot.label,
       seasonYear: season,
       firstKickoffAt: admin.firestore.Timestamp.fromDate(first),
       tiebreakerGameId: last.id,
