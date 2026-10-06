@@ -44,4 +44,17 @@ class PicksService {
           .orderBy('rank')
           .snapshots()
           .map((s) => s.docs.map(WeekResult.fromFirestore).toList());
+
+  /// One-shot read of the results for several weeks, used to build season totals.
+  Future<Map<String, List<WeekResult>>> fetchResultsForWeeks(
+    String poolId,
+    List<String> weekIds,
+  ) async {
+    final out = <String, List<WeekResult>>{};
+    await Future.wait(weekIds.map((id) async {
+      final snap = await _week(poolId, id).collection('results').get();
+      out[id] = snap.docs.map(WeekResult.fromFirestore).toList();
+    }));
+    return out;
+  }
 }
