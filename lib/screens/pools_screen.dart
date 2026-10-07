@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../invite.dart';
 import '../models/pool.dart';
 import '../services/auth_service.dart';
 import '../services/pool_service.dart';
@@ -89,7 +90,17 @@ class PoolsScreen extends StatelessWidget {
                 ListTile(
                   title: Text(p.name),
                   subtitle: Text('${p.season} · ${p.memberUids.length} members · ID: ${p.id}'),
-                  trailing: const Icon(Icons.chevron_right),
+                  trailing: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      IconButton(
+                        icon: const Icon(Icons.copy),
+                        tooltip: 'Copy pool ID',
+                        onPressed: () => copyPoolId(context, p),
+                      ),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
                   onTap: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => PoolHomeScreen(poolId: p.id)),
                   ),

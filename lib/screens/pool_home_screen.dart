@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
+import '../invite.dart';
 import '../models/pool.dart';
 import '../models/week.dart';
 import '../services/auth_service.dart';
@@ -74,17 +75,29 @@ class PoolHomeScreen extends StatelessWidget {
           builder: (_, snap) => Text(snap.data?.name ?? 'Pool'),
         ),
         actions: [
-          // Only the commissioner sees the delete button.
           StreamBuilder<Pool>(
             stream: service.watchPool(poolId),
             builder: (context, snap) {
               final pool = snap.data;
+              if (pool == null) return const SizedBox.shrink();
               final uid = context.read<AuthService>().currentUser?.uid;
-              if (pool == null || pool.commissionerUid != uid) return const SizedBox.shrink();
-              return IconButton(
-                icon: const Icon(Icons.delete_outline),
-                tooltip: 'Delete pool',
-                onPressed: () => _confirmDelete(context, pool),
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Anyone in the pool can invite others.
+                  IconButton(
+                    icon: const Icon(Icons.person_add_alt_1),
+                    tooltip: 'Copy invite to send to friends',
+                    onPressed: () => copyInvite(context, pool),
+                  ),
+                  // Only the commissioner sees the delete button.
+                  if (pool.commissionerUid == uid)
+                    IconButton(
+                      icon: const Icon(Icons.delete_outline),
+                      tooltip: 'Delete pool',
+                      onPressed: () => _confirmDelete(context, pool),
+                    ),
+                ],
               );
             },
           ),
