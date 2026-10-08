@@ -6,7 +6,6 @@ import * as admin from "firebase-admin";
  * (e.g. for SportsDataIO) as long as fetchWeekEvents keeps returning EspnEvent[].
  */
 const SCOREBOARD = "https://site.api.espn.com/apis/site/v2/sports/football/nfl/scoreboard";
-const POOL_TZ = "America/New_York";
 
 export interface EspnEvent {
   id: string;
@@ -69,34 +68,32 @@ function hasRealTeams(ev: EspnEvent): boolean {
   return ok(home?.team?.displayName) && ok(away?.team?.displayName);
 }
 
-function tzOffsetMinutes(date: Date, tz: string): number {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: tz,
-    hourCycle: "h23",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-  }).formatToParts(date);
-  const n = (t: string) => Number(parts.find((p) => p.type === t)!.value);
-  const asUtc = Date.UTC(n("year"), n("month") - 1, n("day"), n("hour"), n("minute"), n("second"));
-  return (asUtc - Math.floor(date.getTime() / 1000) * 1000) / 60000;
+/** Picks lock this long before the week's first kickoff. */
+export const LOCK_LEAD_MS = 60 * 60 * 1000; // one hour
+
+/** The moment picks lock for a week whose first game kicks off at `firstKickoff`. */
+export function lockTimeFor(firstKickoff: Date): Date {
+  return new Date(firstKickoff.getTime() - LOCK_LEAD_MS);
 }
 
-/** Noon Eastern on the calendar day before the given kickoff (Eastern date). */
-export function lockTimeFor(firstKickoff: Date): Date {
-  const parts = new Intl.DateTimeFormat("en-US", {
-    timeZone: POOL_TZ,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-  }).formatToParts(firstKickoff);
-  const n = (t: string) => Number(parts.find((p) => p.type === t)!.value);
-  // Date.UTC normalises day 0 / negative days into the previous month.
-  const guess = new Date(Date.UTC(n("year"), n("month") - 1, n("day") - 1, 12, 0, 0));
-  return new Date(guess.getTime() - tzOffsetMinutes(guess, POOL_TZ) * 60000);
+/**
+ * Works out what a non-scored week's lock fields should be right now. Used so that a change to
+ * the lock rule (or a flex-scheduled first game) corrects existing weeks, including reopening a
+ * week that was locked under an earlier, stricter rule if the new lock time hasn't passed yet.
+ */
+export function reconcileLock(
+  status: string,
+  storedLockAt: Date,
+  firstKickoff: Date,
+  now: Date
+): { status: "open" | "locked"; lockAt: Date; changed: boolean } {
+  const lockAt = lockTimeFor(firstKickoff);
+  const next = now >= lockAt ? "locked" : "open";
+  return {
+    status: next,
+    lockAt,
+    changed: next !== status || lockAt.getTime() !== storedLockAt.getTime(),
+  };
 }
 
 export const weekDocId = (season: number, week: number) =>

@@ -1,5 +1,14 @@
 import * as admin from "firebase-admin";
-import { EspnEvent, SLOTS, Slot, fetchWeekEvents, slotFor, upsertWeek, weekDocId } from "./espn";
+import {
+  EspnEvent,
+  SLOTS,
+  Slot,
+  fetchWeekEvents,
+  reconcileLock,
+  slotFor,
+  upsertWeek,
+  weekDocId,
+} from "./espn";
 import { scoreWeek } from "./scoring";
 
 /**
@@ -8,7 +17,7 @@ import { scoreWeek } from "./scoring";
  *
  * Each run, for every pool:
  *  1. builds the season's weeks if the pool has none yet
- *  2. marks open weeks as locked once their lockAt has passed
+ *  2. keeps each week's lock time at 1 hour before its first game, locking it once that passes
  *  3. refreshes games/scores for weeks in progress, and refreshes upcoming weeks hourly
  *     (to catch flex scheduling)
  *  4. scores a week once its last game is final
@@ -60,9 +69,16 @@ async function main(): Promise<void> {
           const firstKickoff = (d.firstKickoffAt as admin.firestore.Timestamp).toDate();
           const lastSynced = (d.lastSyncedAt as admin.firestore.Timestamp | undefined)?.toDate();
 
-          if (d.status === "open" && lockAt <= now) {
-            await w.ref.update({ status: "locked" });
-            console.log(`Pool ${pool.id} ${w.id}: locked`);
+          // Keep lock fields in line with the rule "locks 1 hour before the first game".
+          // This also reopens a week that was locked under an older rule if its new lock
+          // time is still in the future.
+          const fix = reconcileLock(d.status, lockAt, firstKickoff, now);
+          if (fix.changed) {
+            await w.ref.update({
+              status: fix.status,
+              lockAt: admin.firestore.Timestamp.fromDate(fix.lockAt),
+            });
+            console.log(`Pool ${pool.id} ${w.id}: ${d.status} -> ${fix.status}, locks ${fix.lockAt.toISOString()}`);
           }
 
           const started = firstKickoff <= now;

@@ -1,7 +1,7 @@
 # Football Pool (Flutter + Firebase, free Spark plan)
 
-Weekly straight-up pick 'em. 1 point per correct pick. Picks lock at **noon Eastern the day
-before the week's first game**. The last game of the week is the tiebreaker: players guess the
+Weekly straight-up pick 'em. 1 point per correct pick. Picks lock at **1 hour before the
+week's first game**. The last game of the week is the tiebreaker: players guess the
 combined score, and if people tie on correct picks, the closest guess wins.
 
 Firebase project ID: `football-pool-7a153`. No Cloud Functions, so no Blaze plan needed.
@@ -54,6 +54,13 @@ flutter run
 Sign up, create a pool, and wait for the next sync (use **Run workflow** to speed it up). The weeks
 then appear in the pool.
 
+## Playoffs
+
+Playoff rounds (Wild Card, Divisional, Conference Championships, Super Bowl) are added to each pool
+automatically as ESPN publishes the matchups, and use exactly the same rules as regular weeks: one
+point per correct pick, lock 1 hour before the round's first game, and the round's
+last game is the tiebreaker. They count toward the Season tab. The Pro Bowl is skipped.
+
 ## Things to know
 
 - **Delays:** GitHub's scheduled runs can start several minutes late, so scores and the "locked"
@@ -63,6 +70,7 @@ then appear in the pool.
 - **Failures:** if a run fails, GitHub emails you. Logs are in the Actions tab.
 - **ESPN endpoint:** unofficial. If it changes, only `worker/src/espn.ts` needs updating.
 - **Ties:** a tied NFL game gives no point to either side. Players with no picks score 0.
-- **Time zone:** Eastern. Change `POOL_TZ` in `worker/src/espn.ts` for another zone.
+- **Lock time:** one hour before the first game, set by `LOCK_LEAD_MS` in `worker/src/espn.ts`.
+  Times are stored in UTC and shown in each player's own time zone.
 - **Upgrading later:** if you ever move to Blaze, this worker can be swapped for scheduled Cloud
   Functions without changing the app much.
