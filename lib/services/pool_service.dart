@@ -43,15 +43,39 @@ class PoolService {
       refs.add(week.reference);
     }
 
-    // One delete per document, a few in parallel.
+    await _deleteAll(refs);
+    await poolRef.delete();
+  }
+
+  /// Removes a player from the pool: deletes their picks, results and standings in every week,
+  /// then takes them off the member list. Commissioner only (rules enforce it).
+  ///
+  /// This does not delete their login account (only an admin can do that from the Firebase
+  /// console). Anyone who still knows the pool ID could join again.
+  /// The member list is updated last, so if this fails partway you can simply run it again.
+  Future<void> removeMember(Pool pool, String uid) async {
+    final poolRef = _pools.doc(pool.id);
+    final refs = <DocumentReference<Map<String, dynamic>>>[
+      poolRef.collection('standings').doc(uid),
+    ];
+    final weeks = await poolRef.collection('weeks').get();
+    for (final week in weeks.docs) {
+      refs.add(week.reference.collection('picks').doc(uid));
+      refs.add(week.reference.collection('results').doc(uid));
+    }
+    await _deleteAll(refs);
+    await poolRef.update({
+      'memberUids': FieldValue.arrayRemove([uid]),
+    });
+  }
+
+  /// One delete per document, a few in parallel (deleting a missing document is harmless).
+  Future<void> _deleteAll(List<DocumentReference<Map<String, dynamic>>> refs) async {
     const chunk = 20;
     for (var i = 0; i < refs.length; i += chunk) {
-      await Future.wait(
-        refs.sublist(i, i + chunk > refs.length ? refs.length : i + chunk).map((r) => r.delete()),
-      );
+      final end = i + chunk > refs.length ? refs.length : i + chunk;
+      await Future.wait(refs.sublist(i, end).map((r) => r.delete()));
     }
-
-    await poolRef.delete();
   }
 
   /// Creates the pool. The sync worker notices it on its next run and builds

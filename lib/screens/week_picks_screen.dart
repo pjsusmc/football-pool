@@ -8,6 +8,7 @@ import '../services/picks_service.dart';
 import '../services/pool_service.dart';
 import '../widgets/countdown_banner.dart';
 import '../widgets/game_pick_card.dart';
+import 'week_grid_screen.dart';
 
 class WeekPicksScreen extends StatefulWidget {
   final String poolId;
@@ -76,7 +77,20 @@ class _WeekPicksScreenState extends State<WeekPicksScreen> {
     final uid = context.read<AuthService>().currentUser!.uid;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Weekly Picks')),
+      appBar: AppBar(
+        title: const Text('Weekly Picks'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.grid_view),
+            tooltip: "Everyone's picks",
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => WeekGridScreen(poolId: widget.poolId, weekId: widget.weekId),
+              ),
+            ),
+          ),
+        ],
+      ),
       body: StreamBuilder<Week>(
         stream: pools.watchWeek(widget.poolId, widget.weekId),
         builder: (context, weekSnap) {

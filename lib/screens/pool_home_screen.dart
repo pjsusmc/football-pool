@@ -6,6 +6,7 @@ import '../models/pool.dart';
 import '../models/week.dart';
 import '../services/auth_service.dart';
 import '../services/pool_service.dart';
+import 'members_screen.dart';
 import 'standings_screen.dart';
 import 'week_picks_screen.dart';
 
@@ -100,6 +101,13 @@ class PoolHomeScreen extends StatelessWidget {
                 ],
               );
             },
+          ),
+          IconButton(
+            icon: const Icon(Icons.group),
+            tooltip: 'Members',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => MembersScreen(poolId: poolId)),
+            ),
           ),
           IconButton(
             icon: const Icon(Icons.leaderboard),
