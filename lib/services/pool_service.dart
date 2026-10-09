@@ -90,6 +90,18 @@ class PoolService {
       .snapshots()
       .map(Week.fromFirestore);
 
+  /// One-shot read of a week's games, ordered by kickoff.
+  Future<List<Game>> fetchGames(String poolId, String weekId) async {
+    final s = await _pools
+        .doc(poolId)
+        .collection('weeks')
+        .doc(weekId)
+        .collection('games')
+        .orderBy('kickoffAt')
+        .get();
+    return s.docs.map(Game.fromFirestore).toList();
+  }
+
   Stream<List<Game>> watchGames(String poolId, String weekId) => _pools
       .doc(poolId)
       .collection('weeks')

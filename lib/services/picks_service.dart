@@ -45,6 +45,18 @@ class PicksService {
           .snapshots()
           .map((s) => s.docs.map(WeekResult.fromFirestore).toList());
 
+  /// Number of games in a week (cheap aggregate count, not a full read).
+  Future<int> fetchGameCount(String poolId, String weekId) async {
+    final agg = await _week(poolId, weekId).collection('games').count().get();
+    return agg.count ?? 0;
+  }
+
+  /// One player's picks for a week. Other players' picks are only readable once the week locks.
+  Future<WeekPicks> fetchPicks(String poolId, String weekId, String uid) async {
+    final d = await _week(poolId, weekId).collection('picks').doc(uid).get();
+    return d.exists ? WeekPicks.fromFirestore(d) : WeekPicks.empty(uid);
+  }
+
   /// One-shot read of the results for several weeks, used to build season totals.
   Future<Map<String, List<WeekResult>>> fetchResultsForWeeks(
     String poolId,

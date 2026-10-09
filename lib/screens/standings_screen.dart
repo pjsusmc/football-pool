@@ -6,6 +6,7 @@ import '../models/week.dart';
 import '../services/auth_service.dart';
 import '../services/picks_service.dart';
 import '../services/pool_service.dart';
+import 'player_stats_screen.dart';
 
 class StandingsScreen extends StatelessWidget {
   final String poolId;
@@ -164,6 +165,14 @@ class _SeasonViewState extends State<_SeasonView> {
                 tileColor: rows[i].uid == me
                     ? Theme.of(context).colorScheme.primaryContainer
                     : null,
+                onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                  builder: (_) => PlayerStatsScreen(
+                    poolId: widget.poolId,
+                    uid: rows[i].uid,
+                    name: rows[i].name,
+                    weeks: widget.weeks,
+                  ),
+                )),
                 leading: CircleAvatar(child: Text('${ranks[i]}')),
                 title: Text(
                   rows[i].name,
@@ -245,6 +254,14 @@ class _WeekViewState extends State<_WeekView> {
                           tileColor: r.uid == me
                               ? Theme.of(context).colorScheme.primaryContainer
                               : null,
+                          onTap: () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => PlayerStatsScreen(
+                              poolId: widget.poolId,
+                              uid: r.uid,
+                              name: names[r.uid] ?? 'Player',
+                              weeks: widget.weeks,
+                            ),
+                          )),
                           leading: CircleAvatar(child: Text('${r.rank}')),
                           title: Text(names[r.uid] ?? '…'),
                           subtitle: r.tiebreakerDiff != null
