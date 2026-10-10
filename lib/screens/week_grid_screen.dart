@@ -1,3 +1,4 @@
+import 'dart:ui' show PointerDeviceKind;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../models/game.dart';
@@ -38,7 +39,7 @@ class WeekGridScreen extends StatelessWidget {
                 ),
               );
             }
-            return _Grid(poolId: poolId, weekId: weekId);
+            return _Loader(poolId: poolId, weekId: weekId);
           }),
         );
       },
@@ -53,10 +54,11 @@ Widget _error(String msg) => Center(
       ),
     );
 
-class _Grid extends StatelessWidget {
+/// Loads the pool, games and picks, then hands them to the grid.
+class _Loader extends StatelessWidget {
   final String poolId;
   final String weekId;
-  const _Grid({required this.poolId, required this.weekId});
+  const _Loader({required this.poolId, required this.weekId});
 
   @override
   Widget build(BuildContext context) {
@@ -86,8 +88,13 @@ class _Grid extends StatelessWidget {
                 return FutureBuilder<Map<String, String>>(
                   future: auth.displayNames(pool.memberUids),
                   builder: (context, nameSnap) {
-                    final names = nameSnap.data ?? const <String, String>{};
-                    return _table(context, pool, games, byUid, names, me);
+                    return _PicksGrid(
+                      memberUids: pool.memberUids,
+                      games: games,
+                      picks: byUid,
+                      names: nameSnap.data ?? const <String, String>{},
+                      me: me,
+                    );
                   },
                 );
               },
@@ -97,93 +104,240 @@ class _Grid extends StatelessWidget {
       },
     );
   }
+}
 
-  int _correct(List<Game> games, WeekPicks? p) {
+/// The grid itself. The player column stays put while the game columns scroll sideways, the
+/// header row stays put while rows scroll up and down, and both scroll bars are always visible.
+class _PicksGrid extends StatefulWidget {
+  final List<String> memberUids;
+  final List<Game> games;
+  final Map<String, WeekPicks> picks;
+  final Map<String, String> names;
+  final String? me;
+  const _PicksGrid({
+    required this.memberUids,
+    required this.games,
+    required this.picks,
+    required this.names,
+    required this.me,
+  });
+
+  @override
+  State<_PicksGrid> createState() => _PicksGridState();
+}
+
+class _PicksGridState extends State<_PicksGrid> {
+  static const double _nameW = 130;
+  static const double _correctW = 64;
+  static const double _gameW = 120;
+  static const double _tieW = 130;
+  static const double _headH = 60;
+  static const double _rowH = 48;
+
+  final _leftV = ScrollController(); // player column
+  final _rightV = ScrollController(); // game columns (drives the vertical scroll bar)
+  final _horizontal = ScrollController();
+  bool _syncing = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _leftV.addListener(() => _sync(_leftV, _rightV));
+    _rightV.addListener(() => _sync(_rightV, _leftV));
+  }
+
+  void _sync(ScrollController from, ScrollController to) {
+    if (_syncing || !from.hasClients || !to.hasClients) return;
+    final target = from.offset.clamp(0.0, to.position.maxScrollExtent).toDouble();
+    if ((to.offset - target).abs() < 0.5) return;
+    _syncing = true;
+    to.jumpTo(target);
+    _syncing = false;
+  }
+
+  @override
+  void dispose() {
+    _leftV.dispose();
+    _rightV.dispose();
+    _horizontal.dispose();
+    super.dispose();
+  }
+
+  int _correct(WeekPicks? p) {
     if (p == null) return 0;
     var n = 0;
-    for (final g in games) {
+    for (final g in widget.games) {
       if (g.isFinal && g.winner != null && p.selections[g.id] == g.winner) n++;
     }
     return n;
   }
 
-  Widget _table(BuildContext context, Pool pool, List<Game> games, Map<String, WeekPicks> byUid,
-      Map<String, String> names, String? me) {
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final games = widget.games;
     final last = games.where((g) => g.isLastGameOfWeek).firstOrNull;
     final actualTotal = (last != null && last.homeScore != null && last.awayScore != null)
         ? last.homeScore! + last.awayScore!
         : null;
 
-    final uids = [...pool.memberUids]..sort((a, b) {
-        final c = _correct(games, byUid[b]).compareTo(_correct(games, byUid[a]));
+    final uids = [...widget.memberUids]..sort((a, b) {
+        final c = _correct(widget.picks[b]).compareTo(_correct(widget.picks[a]));
         if (c != 0) return c;
-        return (names[a] ?? '').toLowerCase().compareTo((names[b] ?? '').toLowerCase());
+        return (widget.names[a] ?? '').toLowerCase().compareTo((widget.names[b] ?? '').toLowerCase());
       });
 
-    final headStyle = Theme.of(context).textTheme.labelSmall;
+    final rightW = games.length * _gameW + _tieW;
+    final border = BorderSide(color: theme.dividerColor);
+    final headBg = theme.colorScheme.secondaryContainer;
 
-    DataColumn col(String top, [String? sub]) => DataColumn(
-          label: Column(
+    Widget cell(double w, double h, Widget child,
+            {Color? bg, Alignment align = Alignment.centerLeft, bool bottom = true}) =>
+        Container(
+          width: w,
+          height: h,
+          alignment: align,
+          padding: const EdgeInsets.symmetric(horizontal: 8),
+          decoration: BoxDecoration(
+            color: bg,
+            border: Border(bottom: bottom ? border : BorderSide.none),
+          ),
+          child: child,
+        );
+
+    Widget head(double w, String top, [String? sub]) => cell(
+          w,
+          _headH,
+          Column(
             mainAxisAlignment: MainAxisAlignment.center,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(top, style: headStyle?.copyWith(fontWeight: FontWeight.bold)),
-              if (sub != null) Text(sub, style: headStyle),
+              Text(top,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: theme.textTheme.labelMedium?.copyWith(fontWeight: FontWeight.bold)),
+              if (sub != null)
+                Text(sub, maxLines: 2, overflow: TextOverflow.ellipsis, style: theme.textTheme.labelSmall),
             ],
           ),
+          bg: headBg,
         );
 
-    final columns = <DataColumn>[
-      const DataColumn(label: Text('Player')),
-      const DataColumn(label: Text('Correct'), numeric: true),
-      for (final g in games)
-        col('${g.awayTeam} @', g.isFinal ? '${g.homeTeam} (${g.awayScore}-${g.homeScore})' : g.homeTeam),
-      col('Tiebreaker', actualTotal != null ? 'actual $actualTotal' : 'total pts'),
-    ];
+    Color? rowBg(String uid) => uid == widget.me ? theme.colorScheme.primaryContainer : null;
 
-    final rows = <DataRow>[];
-    for (final uid in uids) {
-      final p = byUid[uid];
-      final submitted = p != null && p.selections.isNotEmpty;
-      rows.add(DataRow(
-        color: uid == me
-            ? MaterialStatePropertyAll(Theme.of(context).colorScheme.primaryContainer)
-            : null,
-        cells: [
-          DataCell(Text(names[uid] ?? '…',
-              style: TextStyle(fontWeight: uid == me ? FontWeight.bold : FontWeight.normal))),
-          DataCell(Text('${_correct(games, p)}')),
-          for (final g in games) DataCell(_pickCell(g, submitted ? p.selections[g.id] : null)),
-          DataCell(Text(
-            p?.tiebreakerGuess == null
+    final leftRows = ListView.builder(
+      controller: _leftV,
+      itemCount: uids.length,
+      itemExtent: _rowH,
+      itemBuilder: (_, i) {
+        final uid = uids[i];
+        return Row(children: [
+          cell(
+            _nameW,
+            _rowH,
+            Text(widget.names[uid] ?? '…',
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(fontWeight: uid == widget.me ? FontWeight.bold : FontWeight.normal)),
+            bg: rowBg(uid),
+          ),
+          cell(_correctW, _rowH, Text('${_correct(widget.picks[uid])}'),
+              bg: rowBg(uid), align: Alignment.center),
+        ]);
+      },
+    );
+
+    final rightRows = ListView.builder(
+      controller: _rightV,
+      itemCount: uids.length,
+      itemExtent: _rowH,
+      itemBuilder: (_, i) {
+        final uid = uids[i];
+        final p = widget.picks[uid];
+        final submitted = p != null && p.selections.isNotEmpty;
+        final guess = p?.tiebreakerGuess;
+        return Row(children: [
+          for (final g in games)
+            cell(_gameW, _rowH, _pickText(g, submitted ? p.selections[g.id] : null), bg: rowBg(uid)),
+          cell(
+            _tieW,
+            _rowH,
+            Text(guess == null
                 ? '–'
                 : actualTotal == null
-                    ? '${p!.tiebreakerGuess}'
-                    : '${p!.tiebreakerGuess} (off ${(p.tiebreakerGuess! - actualTotal).abs()})',
-          )),
-        ],
-      ));
-    }
+                    ? '$guess'
+                    : '$guess (off ${(guess - actualTotal).abs()})'),
+            bg: rowBg(uid),
+          ),
+        ]);
+      },
+    );
+
+    // Mouse drag should scroll too, not only the wheel and scroll bars.
+    final behavior = ScrollConfiguration.of(context).copyWith(
+      scrollbars: false,
+      dragDevices: PointerDeviceKind.values.toSet(),
+    );
 
     return Column(
       children: [
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 4),
-          child: Text(
-            'Ranked by correct picks so far. Green = correct, red = wrong, grey = game not final.',
-            style: Theme.of(context).textTheme.bodySmall,
+          padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+          child: Align(
+            alignment: Alignment.centerLeft,
+            child: Text(
+              'Ranked by correct picks so far. Green = correct, red = wrong, grey = game not final. '
+              'Scroll sideways to see every game.',
+              style: theme.textTheme.bodySmall,
+            ),
           ),
         ),
         Expanded(
-          child: SingleChildScrollView(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: DataTable(
-                columnSpacing: 18,
-                headingRowHeight: 56,
-                dataRowHeight: 44,
-                columns: columns,
-                rows: rows,
+          child: ScrollConfiguration(
+            behavior: behavior,
+            // Vertical bar for the whole grid, driven by the game columns' vertical list.
+            child: Scrollbar(
+              controller: _rightV,
+              thumbVisibility: true,
+              notificationPredicate: (n) => n.metrics.axis == Axis.vertical,
+              child: Row(
+                children: [
+                  SizedBox(
+                    width: _nameW + _correctW,
+                    child: Column(children: [
+                      Row(children: [
+                        head(_nameW, 'Player'),
+                        head(_correctW, 'Correct'),
+                      ]),
+                      Expanded(child: leftRows),
+                    ]),
+                  ),
+                  VerticalDivider(width: 1, color: theme.dividerColor),
+                  Expanded(
+                    // Horizontal bar sits at the bottom of the visible area, not the bottom of the data.
+                    child: Scrollbar(
+                      controller: _horizontal,
+                      thumbVisibility: true,
+                      notificationPredicate: (n) => n.metrics.axis == Axis.horizontal,
+                      child: SingleChildScrollView(
+                        controller: _horizontal,
+                        scrollDirection: Axis.horizontal,
+                        child: SizedBox(
+                          width: rightW,
+                          child: Column(children: [
+                            Row(children: [
+                              for (final g in games)
+                                head(_gameW, '${g.awayTeam} @ ${g.homeTeam}',
+                                    g.isFinal ? 'Final ${g.awayScore}-${g.homeScore}' : null),
+                              head(_tieW, 'Tiebreaker', actualTotal != null ? 'Actual total $actualTotal' : 'Total points'),
+                            ]),
+                            Expanded(child: rightRows),
+                          ]),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
@@ -192,7 +346,7 @@ class _Grid extends StatelessWidget {
     );
   }
 
-  Widget _pickCell(Game g, PickSide? pick) {
+  Widget _pickText(Game g, PickSide? pick) {
     if (pick == null) return const Text('–', style: TextStyle(color: Colors.grey));
     final name = pick == PickSide.home ? g.homeTeam : g.awayTeam;
     Color? color;
@@ -201,6 +355,8 @@ class _Grid extends StatelessWidget {
     }
     return Text(
       name,
+      maxLines: 1,
+      overflow: TextOverflow.ellipsis,
       style: TextStyle(
         color: color ?? Colors.grey.shade600,
         fontWeight: color != null ? FontWeight.w600 : FontWeight.normal,
