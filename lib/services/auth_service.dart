@@ -25,7 +25,20 @@ class AuthService {
     final out = <String, String>{};
     for (final uid in uids) {
       final doc = await _db.collection('users').doc(uid).get();
-      out[uid] = (doc.data()?['displayName'] as String?) ?? 'Player';
+      var name = (doc.data()?['displayName'] as String?)?.trim();
+      // Self-heal: if your own profile document is missing a name, fall back to the name on your
+      // login account and save it, so everyone else sees it too.
+      final me = _auth.currentUser;
+      if ((name == null || name.isEmpty) && me != null && me.uid == uid) {
+        final authName = me.displayName?.trim();
+        if (authName != null && authName.isNotEmpty) {
+          name = authName;
+          try {
+            await _db.collection('users').doc(uid).set({'displayName': authName}, SetOptions(merge: true));
+          } catch (_) {}
+        }
+      }
+      out[uid] = (name == null || name.isEmpty) ? 'Player' : name;
     }
     return out;
   }
