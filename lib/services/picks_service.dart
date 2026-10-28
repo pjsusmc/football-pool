@@ -36,7 +36,19 @@ class PicksService {
       throw WeekLockedException('Picks for this week are locked.');
     }
     await _week(poolId, week.id).collection('picks').doc(picks.uid).set(picks.toFirestore());
+    // Marker so the pool screen can show how many people have picked (never reveals the picks).
+    await _week(poolId, week.id)
+        .collection('submissions')
+        .doc(picks.uid)
+        .set({'submittedAt': FieldValue.serverTimestamp()});
   }
+
+  /// UIDs of everyone who has submitted picks for the week. Readable while the week is open.
+  Stream<Set<String>> watchSubmittedUids(String poolId, String weekId) =>
+      _week(poolId, weekId)
+          .collection('submissions')
+          .snapshots()
+          .map((s) => s.docs.map((d) => d.id).toSet());
 
   Stream<List<WeekResult>> watchResults(String poolId, String weekId) =>
       _week(poolId, weekId)

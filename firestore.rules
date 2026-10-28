@@ -65,6 +65,16 @@ service cloud.firestore {
           allow delete: if isCommissioner(poolId);
         }
 
+        // A tiny "has submitted" marker per player so everyone can see HOW MANY people have
+        // picked (e.g. "4 of 8") without exposing anyone's actual picks while the week is open.
+        match /submissions/{uid} {
+          allow read: if isMember(poolId);
+          allow create, update: if isMember(poolId)
+            && request.auth.uid == uid
+            && weekIsOpen(poolId, weekId);
+          allow delete: if isCommissioner(poolId);
+        }
+
         match /results/{uid} {
           allow read: if isMember(poolId);
           allow create, update: if false;

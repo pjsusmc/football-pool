@@ -81,6 +81,22 @@ async function main(): Promise<void> {
             console.log(`Pool ${pool.id} ${w.id}: ${d.status} -> ${fix.status}, locks ${fix.lockAt.toISOString()}`);
           }
 
+          // Backfill the "has submitted" markers the pool screen counts (covers picks saved before
+          // that feature existed). New submissions write their own marker from the app.
+          const status = fix.changed ? fix.status : d.status;
+          if (status === "open") {
+            const picks = await w.ref.collection("picks").select().get();
+            const marked = new Set((await w.ref.collection("submissions").select().get()).docs.map((x) => x.id));
+            for (const p of picks.docs) {
+              if (!marked.has(p.id)) {
+                await w.ref
+                  .collection("submissions")
+                  .doc(p.id)
+                  .set({ submittedAt: admin.firestore.FieldValue.serverTimestamp() });
+              }
+            }
+          }
+
           const started = firstKickoff <= now;
           const soon = firstKickoff.getTime() - now.getTime() < 7 * 24 * HOUR;
           const stale = !lastSynced || now.getTime() - lastSynced.getTime() > 55 * 60 * 1000;

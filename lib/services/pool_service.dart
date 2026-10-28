@@ -38,6 +38,7 @@ class PoolService {
       // Pick/result doc IDs are member uids, so no need to read other players' picks.
       for (final uid in pool.memberUids) {
         refs.add(week.reference.collection('picks').doc(uid));
+        refs.add(week.reference.collection('submissions').doc(uid));
         refs.add(week.reference.collection('results').doc(uid));
       }
       refs.add(week.reference);
@@ -61,6 +62,7 @@ class PoolService {
     final weeks = await poolRef.collection('weeks').get();
     for (final week in weeks.docs) {
       refs.add(week.reference.collection('picks').doc(uid));
+      refs.add(week.reference.collection('submissions').doc(uid));
       refs.add(week.reference.collection('results').doc(uid));
     }
     await _deleteAll(refs);

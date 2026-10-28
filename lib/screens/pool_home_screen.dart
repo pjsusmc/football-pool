@@ -5,6 +5,7 @@ import '../invite.dart';
 import '../models/pool.dart';
 import '../models/week.dart';
 import '../services/auth_service.dart';
+import '../services/picks_service.dart';
 import '../services/pool_service.dart';
 import 'members_screen.dart';
 import 'standings_screen.dart';
@@ -135,16 +136,22 @@ class PoolHomeScreen extends StatelessWidget {
               ),
             );
           }
+          // The "current" week is the first one still open for picks.
+          final currentId = weeks.where((w) => w.isOpen).map((w) => w.id).firstOrNull;
           return ListView(
             children: [
               for (final w in weeks)
                 ListTile(
                   title: Text(w.title),
-                  subtitle: Text(w.isOpen
-                      ? 'Open · picks lock ${fmt.format(w.lockAt.toLocal())}'
-                      : w.status == WeekStatus.scored
-                          ? 'Final'
-                          : 'Locked'),
+                  subtitle: w.isOpen
+                      ? Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('Open · picks lock ${fmt.format(w.lockAt.toLocal())}'),
+                            if (w.id == currentId) _PickCount(poolId: poolId, weekId: w.id),
+                          ],
+                        )
+                      : Text(w.status == WeekStatus.scored ? 'Final' : 'Locked'),
                   trailing: Icon(w.isOpen ? Icons.edit : Icons.lock,
                       color: w.isOpen ? Colors.green : Colors.grey),
                   onTap: () => Navigator.of(context).push(
@@ -172,6 +179,43 @@ class PoolHomeScreen extends StatelessWidget {
           );
         },
       ),
+    );
+  }
+}
+
+/// "4 of 8 have made picks" for a week that is still open.
+class _PickCount extends StatelessWidget {
+  final String poolId;
+  final String weekId;
+  const _PickCount({required this.poolId, required this.weekId});
+
+  @override
+  Widget build(BuildContext context) {
+    final pools = context.read<PoolService>();
+    final picks = context.read<PicksService>();
+    return StreamBuilder<Pool>(
+      stream: pools.watchPool(poolId),
+      builder: (context, poolSnap) {
+        return StreamBuilder<Set<String>>(
+          stream: picks.watchSubmittedUids(poolId, weekId),
+          builder: (context, subSnap) {
+            if (!poolSnap.hasData || !subSnap.hasData) return const SizedBox.shrink();
+            final members = poolSnap.data!.memberUids;
+            final done = members.where(subSnap.data!.contains).length;
+            final all = members.isNotEmpty && done == members.length;
+            return Padding(
+              padding: const EdgeInsets.only(top: 2),
+              child: Text(
+                '$done of ${members.length} have made picks',
+                style: TextStyle(
+                  fontWeight: FontWeight.w600,
+                  color: all ? Colors.green.shade700 : Theme.of(context).colorScheme.primary,
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
