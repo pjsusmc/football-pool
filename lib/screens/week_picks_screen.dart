@@ -8,6 +8,7 @@ import '../services/picks_service.dart';
 import '../services/pool_service.dart';
 import '../widgets/countdown_banner.dart';
 import '../widgets/game_pick_card.dart';
+import '../widgets/pick_status.dart';
 import 'week_grid_screen.dart';
 
 class WeekPicksScreen extends StatefulWidget {
@@ -115,6 +116,7 @@ class _WeekPicksScreenState extends State<WeekPicksScreen> {
                   return Column(
                     children: [
                       CountdownBanner(lockAt: week.lockAt, isLocked: locked),
+                      PickStatus(poolId: widget.poolId, week: week),
                       Expanded(
                         child: ListView(
                           padding: const EdgeInsets.only(top: 8, bottom: 24),
